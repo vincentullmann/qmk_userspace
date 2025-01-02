@@ -22,12 +22,14 @@ VIA_ENABLE = yes
 
 # https://docs.qmk.fm/features/rgb_matrix#custom-rgb-matrix-effects
 # RGB_MATRIX_ENABLE = yes
-# RGB_MATRIX_CUSTOM_USER = yes
+RGB_MATRIX_CUSTOM_USER = yes
 
 
-# EXTRAKEY_ENABLE = no # Audio control and System control
 # LK_WIRELESS_ENABLE = no
 
 CONSOLE_ENABLE = yes
-# MOUSEKEY_ENABLE = no
-# NKRO_ENABLE = no
+MOUSEKEY_ENABLE = no
+NKRO_ENABLE = no
+EXTRAKEY_ENABLE = no
+
+
