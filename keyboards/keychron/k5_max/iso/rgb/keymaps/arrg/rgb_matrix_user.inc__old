@@ -1,6 +1,3 @@
-
-
-
 RGB_MATRIX_EFFECT(ARRG_SPLASH)
 
 #ifdef RGB_MATRIX_CUSTOM_EFFECT_IMPLS
@@ -33,6 +30,7 @@ uint8_t fit8(uint8_t val, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8
     return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
+
 uint16_t fit16(uint16_t val, uint16_t in_min, uint16_t in_max, uint16_t out_min, uint16_t out_max) {
 
      // Clamp the result to ensure it fits within the output range
@@ -45,58 +43,6 @@ uint16_t fit16(uint16_t val, uint16_t in_min, uint16_t in_max, uint16_t out_min,
     }
     return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
-
-
-
-
-
-#define NUMPAD_RANGE KC_NUM_LOCK ... KC_KP_DOT
-
-
-void handle_flags(effect_params_t* params) {
-    RGB_MATRIX_USE_LIMITS(led_min, led_max);
-
-    led_t led_state = host_keyboard_led_state();
-
-    dprintf("led_state.caps_lock=%u\n", led_state.caps_lock);
-    uint8_t layer = 2;
-
-
-    if (led_state.caps_lock) {
-        for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
-            for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
-                uint8_t index = g_led_config.matrix_co[row][col];
-
-                if (index >= led_min && index < led_max && index != NO_LED) {
-
-                    uint16_t keycode = keymap_key_to_keycode(layer, (keypos_t){col,row});
-                    if (keycode >= KC_A && keycode <= KC_Z) {
-                        rgb_matrix_set_color(index, RGB_RED);
-                    } // if keycode
-                } // if index
-            }
-        }
-    }
-
-    // light up numblock if numlocks is OFF
-    if (!led_state.num_lock) {
-        for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
-            for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
-                uint8_t index = g_led_config.matrix_co[row][col];
-
-                if (index >= led_min && index < led_max && index != NO_LED) {
-
-                    uint16_t keycode = keymap_key_to_keycode(layer, (keypos_t){col,row});
-                    if (keycode >= KC_NUM_LOCK && keycode <= KC_KP_DOT) {
-                        rgb_matrix_set_color(index, RGB_RED);
-                    } // if keycode
-                } // if index
-            }
-        }
-        return;
-    }
-}
-
 
 
 
@@ -220,9 +166,6 @@ bool ARRG_SPLASH(effect_params_t* params) {
         uint8_t b = fit8(led_effect, 32, 0, rgbA.b, rgbB.b);
         rgb_matrix_set_color(i, r, g, b);
     } // End of LED loop
-
-
-    handle_flags(params);
 
     return rgb_matrix_check_finished_leds(led_max);
 }

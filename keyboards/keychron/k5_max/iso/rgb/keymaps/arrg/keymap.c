@@ -62,68 +62,13 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 };
 
 
-static void debug_matix(void) {
-    xprintf("==================\n");
-
-    for (uint8_t row = 0; row < MATRIX_ROWS; row++) {
-        for (uint8_t col = 0; col < MATRIX_COLS; col++) {
-            printf("row: %2u, col: %2u\n", row, col);
-
-            /*
-            uint8_t i = g_led_config.matrix_co[row][col];
-            if (i == NO_LED) { continue;}
-
-            int16_t x = g_led_config.point[i].x;
-            int16_t y = g_led_config.point[i].y;
-            xprintf("row: %2u, col: %2u, i: %2u | x/y=%i/%i \n", row, col, i, x, y);
-            */
-        }
-    }
-
-    xprintf("==================\n");
-}
-
-
-// clang-format on
-bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-
-    if (!process_record_keychron_common(keycode, record)) {
-        return false;
-    }
-
-    if (record->event.pressed) {
-        // xprintf("KL: kc: 0x%04X, col: %2u, row: %2u, type: %d \n", keycode, record->event.key.col, record->event.key.row, record->event.type);
-        // type:
-        // 0: TICK_EVENT
-        // 1: KEY_EVENT
-        // 2: ENCODER_CW_EVENT
-        // 3: ENCODER_CCW_EVENT
-        // 4: COMBO_EVENT
-
-
-        if (keycode == KC_RALT) {
-            debug_matix();
-        }
-
-        // ARRG_BLUR_process_record(keycode, record);
-    }
-
-    return true;
-}
-
-
-
-
 bool color_defined_keys(uint8_t layer) {
 
-    // light up active layer (if its >0)
-    // layer = get_highest_layer(layer_state);
     if (layer > 2) {
         for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
             for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
                 uint8_t index = g_led_config.matrix_co[row][col];
 
-                // if (index >= led_min && index < led_max && index != NO_LED) {
                 uint16_t keycode = keymap_key_to_keycode(layer, (keypos_t){col,row});
                 if (keycode != KC_TRNS) {
                     rgb_matrix_set_color(index, RGB_GREEN);
@@ -138,25 +83,65 @@ bool color_defined_keys(uint8_t layer) {
 
 bool rgb_matrix_indicators_user(void) {
     // uint8_t layer = biton32(layer_state);
-    uint8_t layer = get_highest_layer(layer_state);
-
+    const uint8_t layer = get_highest_layer(layer_state);
+    
     if (layer > WIN_BASE) {
         color_defined_keys(layer);
     }
+   
+    
+    return true;
+}
 
-    /*
-    switch (layer) {
-        case WIN_BASE:
-            rgb_matrix_set_color_all(RGB_BLUE);
-            break;
-        case WIN_FN:
-            rgb_matrix_set_color_all(RGB_RED);
-            break;
-        default:
-            rgb_matrix_set_color_all(RGB_WHITE);
-            break;
-    }
-    */
+
+
+// Helpers
+// see: quantum/keycodes.h
+#define IS_LETTER(code) ((code >= KC_A && code <= KC_Z))
+#define IS_NUMPAD(code) ((code >= KC_NUM_LOCK && code <= KC_KP_DOT))
+#define IS_SPECIAL(code) ((code >= KC_ENTER && code <= KC_F12))
+
+
+bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    
+    const led_t led_state = host_keyboard_led_state();
+    const uint8_t layer = 2;
+
+
+    const uint8_t mods = get_mods();
+    const bool is_shift = mods & MOD_MASK_SHIFT;
+    const bool is_ctrl = mods & MOD_MASK_CTRL;
+
+
+    for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
+        for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
+            const uint8_t index = g_led_config.matrix_co[row][col];
+    
+            if (index >= led_min && index < led_max && index != NO_LED) {
+                const uint16_t keycode = keymap_key_to_keycode(layer, (keypos_t){col,row});
+    
+                // caps lock => letters red
+                if (led_state.caps_lock && IS_LETTER(keycode)) {
+                    rgb_matrix_set_color(index, RGB_RED);
+                }
+                // shift => letters yellow
+                if (is_shift && IS_LETTER(keycode)) {
+                    rgb_matrix_set_color(index, RGB_YELLOW);
+                }
+
+                // ctrl => special keys => turquoise
+                if (is_ctrl && IS_SPECIAL(keycode)) {
+                    rgb_matrix_set_color(index, RGB_TURQUOISE);
+                }
+
+                // num lock => numpad => red
+                if (!led_state.num_lock && IS_NUMPAD(keycode)) {
+                    rgb_matrix_set_color(index, RGB_RED);
+                }
+            } // if index
+        } // for col
+    } // for row
+
     return true;
 
 }

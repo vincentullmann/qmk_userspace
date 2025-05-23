@@ -1,6 +1,5 @@
 VIA_ENABLE = yes
 
-
 # DYNAMIC_MACRO_ENABLE = yes
 # DM_REC1
 # DM_REC2
@@ -25,12 +24,11 @@ KEY_LOCK_ENABLE = yes
 
 # https://docs.qmk.fm/features/rgb_matrix#custom-rgb-matrix-effects
 # RGB_MATRIX_ENABLE = yes
-RGB_MATRIX_CUSTOM_USER = yes
-
+# RGB_MATRIX_CUSTOM_USER = yes
 
 # LK_WIRELESS_ENABLE = no
 
-CONSOLE_ENABLE = yes
+# CONSOLE_ENABLE = yes
 MOUSEKEY_ENABLE = no
 NKRO_ENABLE = no
 EXTRAKEY_ENABLE = no

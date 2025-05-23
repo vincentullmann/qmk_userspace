@@ -3,7 +3,8 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/../qmk_firmware"
             ],
             "defines": [
                 "RGB_MATRIX_KEYREACTIVE_ENABLED",
