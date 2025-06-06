@@ -35,3 +35,7 @@ EXTRAKEY_ENABLE = no
 
 
 UNICODE_ENABLE = yes
+
+
+# https://docs.qmk.fm/features/dip_switch
+# DIP_SWITCH_ENABLE = yes
