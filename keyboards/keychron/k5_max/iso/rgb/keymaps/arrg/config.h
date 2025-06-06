@@ -30,3 +30,8 @@
 #define RGB_MATRIX_DEFAULT_SPD 64  // Sets the default animation speed, if none has been set
 #define RGB_MATRIX_DEFAULT_HUE 175
 #define RGB_MATRIX_DEFAULT_SAT 200
+
+
+
+// increase number of layers from 4 to 5
+#define DYNAMIC_KEYMAP_LAYER_COUNT 5
