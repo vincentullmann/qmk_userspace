@@ -52,40 +52,21 @@ static const speed_stop_t speed_palette[] = {
 // ---- State -----------------------------------------------------------------
 typedef struct {
     uint32_t t0;
-    uint8_t  led;
-    float    pos; // speed value (palette position) at press time
+    uint8_t  x, y; // hit position (LED units)
+    float    pos;  // speed value (palette position) at press time
     bool     active;
 } splash_hit_t;
-
-// Pairwise LED distances (LED units, max ~233 fits uint8), built once.
-static uint8_t led_dist[RGB_MATRIX_LED_COUNT][RGB_MATRIX_LED_COUNT];
-static bool    led_dist_ready = false;
-
-static void build_led_dist(void) {
-    for (uint8_t a = 0; a < RGB_MATRIX_LED_COUNT; a++) {
-        for (uint8_t b = 0; b < RGB_MATRIX_LED_COUNT; b++) {
-            float dx       = (float)g_led_config.point[a].x - g_led_config.point[b].x;
-            float dy       = (float)g_led_config.point[a].y - g_led_config.point[b].y;
-            float d        = sqrtf(dx * dx + dy * dy);
-            led_dist[a][b] = d > 255 ? 255 : (uint8_t)(d + 0.5f);
-        }
-    }
-    led_dist_ready = true;
-}
 
 static splash_hit_t splash_hits[SPLASH_MAX_HITS];
 static uint8_t      splash_next = 0;
 static bool         splash_held[RGB_MATRIX_LED_COUNT];
+static uint8_t      held_count = 0;
 
 static float    speed_acc    = 0;
 static float    speed_smooth = SPEED_BASE;
 static uint32_t speed_last_ms;
 
 static void speed_palette_rgb(float v, float *r, float *g, float *b) {
-    if (v <= 0) {
-        *r = *g = *b = 0;
-        return;
-    }
     for (uint8_t s = 1; s < SPEED_PALETTE_SIZE; s++) {
         if (v <= speed_palette[s].pos) {
             const speed_stop_t *lo = &speed_palette[s - 1];
@@ -104,10 +85,17 @@ static void speed_palette_rgb(float v, float *r, float *g, float *b) {
 
 // Decay the press accumulator and low-pass the speed value towards its target.
 static float speed_update(uint32_t now) {
-    uint32_t dt = now - speed_last_ms;
+    static uint32_t cached_dt = 0;
+    static float    decay_acc, decay_smooth; // exp factors for cached_dt (frame interval is near constant)
+    uint32_t        dt = now - speed_last_ms;
     if (dt) {
-        speed_acc *= expf(-(float)dt / SPEED_TAU_MS);
-        speed_smooth += (1.0f - expf(-(float)dt / SPEED_SMOOTH_MS)) * (SPEED_BASE + speed_acc / SPEED_DIV - speed_smooth);
+        if (dt != cached_dt) {
+            cached_dt    = dt;
+            decay_acc    = expf(-(float)dt / SPEED_TAU_MS);
+            decay_smooth = 1.0f - expf(-(float)dt / SPEED_SMOOTH_MS);
+        }
+        speed_acc *= decay_acc;
+        speed_smooth += decay_smooth * (SPEED_BASE + speed_acc / SPEED_DIV - speed_smooth);
         speed_last_ms = now;
     }
     return speed_smooth;
@@ -118,6 +106,7 @@ void heatmap_blur_key_event(uint8_t row, uint8_t col, bool pressed) {
     if (row >= MATRIX_ROWS || col >= MATRIX_COLS) return;
     uint8_t led = g_led_config.matrix_co[row][col];
     if (led == NO_LED || led >= RGB_MATRIX_LED_COUNT) return;
+    if (splash_held[led] != pressed) held_count += pressed ? 1 : -1;
     splash_held[led] = pressed;
     if (!pressed) return;
 
@@ -129,7 +118,8 @@ void heatmap_blur_key_event(uint8_t row, uint8_t col, bool pressed) {
     splash_hit_t *h = &splash_hits[splash_next];
     splash_next     = (splash_next + 1) % SPLASH_MAX_HITS;
     h->t0           = now;
-    h->led          = led;
+    h->x            = g_led_config.point[led].x;
+    h->y            = g_led_config.point[led].y;
     h->pos          = speed_smooth > SPEED_MIN_RING ? speed_smooth : SPEED_MIN_RING;
     h->active       = true;
 }
@@ -137,25 +127,28 @@ void heatmap_blur_key_event(uint8_t row, uint8_t col, bool pressed) {
 static bool heatmap_blur(effect_params_t *params) {
     RGB_MATRIX_USE_LIMITS(led_min, led_max);
 
-    if (!led_dist_ready) build_led_dist();
-
     if (params->init) {
         memset(splash_hits, 0, sizeof(splash_hits));
         memset(splash_held, 0, sizeof(splash_held));
+        held_count    = 0;
         speed_acc     = 0;
         speed_smooth  = SPEED_BASE;
         speed_last_ms = timer_read32();
     }
 
     const uint32_t now = timer_read32();
-    float          vr, vg, vb;
-    {
+
+    // Held-key colour: only needed (and speed state only advanced) while a key is down.
+    float vr = 0, vg = 0, vb = 0;
+    if (held_count) {
         float v = speed_update(now);
         speed_palette_rgb(v > SPEED_MIN_RING ? v : SPEED_MIN_RING, &vr, &vg, &vb);
     }
 
-    // Per-ring state for this frame.
-    float ring_r[SPLASH_MAX_HITS], ring_fade[SPLASH_MAX_HITS], ring_cr[SPLASH_MAX_HITS], ring_cg[SPLASH_MAX_HITS], ring_cb[SPLASH_MAX_HITS];
+    // Compact list of live rings, with per-ring constants for this frame.
+    float   ring_x[SPLASH_MAX_HITS], ring_y[SPLASH_MAX_HITS], ring_r[SPLASH_MAX_HITS], ring_r2[SPLASH_MAX_HITS], ring_outer2[SPLASH_MAX_HITS], ring_inv[SPLASH_MAX_HITS];
+    float   ring_fade[SPLASH_MAX_HITS], ring_cr[SPLASH_MAX_HITS], ring_cg[SPLASH_MAX_HITS], ring_cb[SPLASH_MAX_HITS];
+    uint8_t n = 0;
     for (uint8_t k = 0; k < SPLASH_MAX_HITS; k++) {
         splash_hit_t *h = &splash_hits[k];
         if (!h->active) continue;
@@ -164,35 +157,44 @@ static bool heatmap_blur(effect_params_t *params) {
             h->active = false;
             continue;
         }
-        float f      = 1.0f - (float)age / SPLASH_LIFE_MS;
-        ring_fade[k] = f * f * (3.0f - 2.0f * f); // smoothstep: eases in and out
-        ring_r[k]    = SPLASH_SPEED * (float)age / 1000.0f;
-        float t      = (float)age / SPLASH_LIFE_MS;
-        float end    = h->pos < HUE_FADE_END ? h->pos : HUE_FADE_END;
-        speed_palette_rgb(h->pos + (end - h->pos) * t, &ring_cr[k], &ring_cg[k], &ring_cb[k]);
+        float t        = (float)age / SPLASH_LIFE_MS;
+        float f        = 1.0f - t;
+        float rr       = SPLASH_SPEED * (float)age / 1000.0f;
+        float ro       = rr + SPLASH_WIDTH;
+        ring_x[n]      = h->x;
+        ring_y[n]      = h->y;
+        ring_r[n]      = rr;
+        ring_r2[n]     = rr * rr;
+        ring_outer2[n] = ro * ro;
+        ring_inv[n]    = 1.0f / (rr + 3.0f);
+        ring_fade[n]   = f * f * (3.0f - 2.0f * f); // smoothstep: eases in and out
+        speed_palette_rgb(h->pos + (HUE_FADE_END - h->pos) * t, &ring_cr[n], &ring_cg[n], &ring_cb[n]);
+        n++;
     }
 
     for (uint8_t i = led_min; i < led_max; i++) {
         float r = 0, g = 0, b = 0, sum_i = 0; // weighted colour average: sum(I*c)/sum(I), brightness min(1, sum(I))
-        for (uint8_t k = 0; k < SPLASH_MAX_HITS; k++) {
-            const splash_hit_t *h = &splash_hits[k];
-            if (!h->active) continue;
-            float d  = led_dist[h->led][i];
-            float rr = ring_r[k];
-            if (d > rr + SPLASH_WIDTH) continue; // ahead of the ring: no ring, no fill
-            float u = (d - rr) / SPLASH_WIDTH;
-            float I  = 1.0f - u * u;
-            I        = I > 0 ? I * I : 0; // (1-u^2)^2: soft edges on both sides
-            if (d < rr) {
-                float q = 1.0f - d / (rr + 3.0f);
-                I += SPLASH_FILL * q * q;
+        if (n) {
+            const float lx = g_led_config.point[i].x, ly = g_led_config.point[i].y;
+            for (uint8_t k = 0; k < n; k++) {
+                float dx = lx - ring_x[k], dy = ly - ring_y[k];
+                float d2 = dx * dx + dy * dy;
+                if (d2 > ring_outer2[k]) continue; // ahead of the ring: no ring, no fill
+                float d  = sqrtf(d2);
+                float u  = (d - ring_r[k]) * (1.0f / SPLASH_WIDTH);
+                float I  = 1.0f - u * u;
+                I        = I > 0 ? I * I : 0; // (1-u^2)^2: soft edges on both sides
+                if (d2 < ring_r2[k]) {
+                    float q = 1.0f - d * ring_inv[k];
+                    I += SPLASH_FILL * q * q;
+                }
+                if (I > 1) I = 1;
+                I *= ring_fade[k];
+                r += ring_cr[k] * I;
+                g += ring_cg[k] * I;
+                b += ring_cb[k] * I;
+                sum_i += I;
             }
-            if (I > 1) I = 1;
-            I *= ring_fade[k];
-            r += ring_cr[k] * I;
-            g += ring_cg[k] * I;
-            b += ring_cb[k] * I;
-            sum_i += I;
         }
         if (splash_held[i]) {
             r += vr * SPLASH_HELD;
