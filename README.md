@@ -1,59 +1,85 @@
-# QMK Userspace
+# QMK Userspace: Keychron K5 Max (ISO, RGB), keymap `arrg`
 
-This is a template repository which allows for an external set of QMK keymaps to be defined and compiled. This is useful for users who want to maintain their own keymaps without having to fork the main QMK repository.
+The K5 Max isn't in upstream QMK. It only lives in Keychron's fork, so you build against
+[Keychron/qmk_firmware](https://github.com/Keychron/qmk_firmware) on branch **`2025q3`**,
+not `qmk/qmk_firmware`.
 
-## Howto configure your build targets
+- Keyboard: `keychron/k5_max/iso/rgb`
+- Keymap: `arrg` (`keyboards/keychron/k5_max/iso/rgb/keymaps/arrg`)
 
-1. Run the normal `qmk setup` procedure if you haven't already done so -- see [QMK Docs](https://docs.qmk.fm/#/newbs) for details.
-1. Fork this repository
-1. Clone your fork to your local machine
-1. Enable userspace in QMK config using `qmk config user.overlay_dir="$(realpath qmk_userspace)"`
-1. Add a new keymap for your board using `qmk new-keymap`
-    * This will create a new keymap in the `keyboards` directory, in the same location that would normally be used in the main QMK repository. For example, if you wanted to add a keymap for the Planck, it will be created in `keyboards/planck/keymaps/<your keymap name>`
-    * You can also create a new keymap using `qmk new-keymap -kb <your_keyboard> -km <your_keymap>`
-    * Alternatively, add your keymap manually by placing it in the location specified above.
-    * `layouts/<layout name>/<your keymap name>/keymap.*` is also supported if you prefer the layout system
-1. Add your keymap(s) to the build by running `qmk userspace-add -kb <your_keyboard> -km <your_keymap>`
-    * This will automatically update your `qmk.json` file
-    * Corresponding `qmk userspace-remove -kb <your_keyboard> -km <your_keymap>` will delete it
-    * Listing the build targets can be done with `qmk userspace-list`
-1. Commit your changes
+## Build
 
-## Howto build with GitHub
+### Option A: Docker (no local toolchain)
 
-1. In the GitHub Actions tab, enable workflows
-1. Push your changes above to your forked GitHub repository
-1. Look at the GitHub Actions for a new actions run
-1. Wait for the actions run to complete
-1. Inspect the Releases tab on your repository for the latest firmware build
+```sh
+# one-time: clone Keychron's fork next to this repo
+git clone --depth 1 -b 2025q3 --recurse-submodules --shallow-submodules \
+    https://github.com/Keychron/qmk_firmware ../qmk_firmware
 
-## Howto build locally
-
-1. Run the normal `qmk setup` procedure if you haven't already done so -- see [QMK Docs](https://docs.qmk.fm/#/newbs) for details.
-1. Fork this repository
-1. Clone your fork to your local machine
-1. `cd` into this repository's clone directory
-1. Set global userspace path: `qmk config user.overlay_dir="$(realpath .)"` -- you MUST be located in the cloned userspace location for this to work correctly
-    * This will be automatically detected if you've `cd`ed into your userspace repository, but the above makes your userspace available regardless of your shell location.
-1. Compile normally: `qmk compile -kb your_keyboard -km your_keymap` or `make your_keyboard:your_keymap`
-
-Alternatively, if you configured your build targets above, you can use `qmk userspace-compile` to build all of your userspace targets at once.
-
-## Extra info
-
-If you wish to point GitHub actions to a different repository, a different branch, or even a different keymap name, you can modify `.github/workflows/build_binaries.yml` to suit your needs.
-
-To override the `build` job, you can change the following parameters to use a different QMK repository or branch:
-```
-    with:
-      qmk_repo: qmk/qmk_firmware
-      qmk_ref: master
+# build
+docker run --rm \
+    --user "$(id -u):$(id -g)" -e HOME=/tmp \
+    -v "$(realpath ../qmk_firmware)":/qmk_firmware \
+    -v "$(pwd)":/qmk_userspace \
+    -w /qmk_firmware \
+    ghcr.io/qmk/qmk_cli \
+    bash -c 'qmk config user.overlay_dir=/qmk_userspace && make keychron/k5_max/iso/rgb:arrg'
 ```
 
-If you wish to manually manage `qmk_firmware` using git within the userspace repository, you can add `qmk_firmware` as a submodule in the userspace directory instead. GitHub Actions will automatically use the submodule at the pinned revision if it exists, otherwise it will use the default latest revision of `qmk_firmware` from the main repository.
+Output: `keychron_k5_max_iso_rgb_arrg.bin`, written to this repo and to `../qmk_firmware`.
 
-This can also be used to control which fork is used, though only upstream `qmk_firmware` will have support for external userspace until other manufacturers update their forks.
+### Option B: Local QMK CLI
 
-1. (First time only) `git submodule add https://github.com/qmk/qmk_firmware.git`
-1. (To update) `git submodule update --init --recursive`
-1. Commit your changes to your userspace repository
+```sh
+pipx install qmk            # or: uv tool install qmk
+qmk setup -H ../qmk_firmware Keychron/qmk_firmware -b 2025q3
+qmk config user.overlay_dir="$(realpath .)"
+qmk compile -kb keychron/k5_max/iso/rgb -km arrg
+```
+
+`qmk userspace-compile` builds every target listed in `qmk.json`.
+
+### Updating to a newer Keychron firmware
+
+```sh
+cd ../qmk_firmware
+git fetch --depth 1 origin <new-branch>
+git checkout FETCH_HEAD
+git submodule update --init --recursive --depth 1
+```
+
+Then diff `keyboards/keychron/k5_max/iso/rgb/keymaps/keychron/keymap.c` against
+`arrg/keymap.c` and carry over any upstream changes, such as renamed keycodes.
+
+## Install (flash)
+
+1. Put the keyboard into bootloader (DFU) mode, using one of these:
+   - **Fn + V** (`QK_BOOT` in this keymap), while it's connected by cable.
+   - Set the mode switch to **Cable**, unplug it, then hold **Esc** while plugging the USB cable back in.
+   - Remove the space bar keycap, then hold the reset button underneath while plugging in.
+
+   In DFU mode the backlight is off and `lsusb` shows `STMicroelectronics STM Device in DFU Mode` (`0483:df11`).
+2. Flash it:
+   ```sh
+   # with the QMK CLI (handles DFU mode for you)
+   qmk flash -kb keychron/k5_max/iso/rgb -km arrg
+   # or flash the built .bin directly
+   dfu-util -a 0 -d 0483:df11 -s 0x08000000:leave -D keychron_k5_max_iso_rgb_arrg.bin
+   ```
+3. The keyboard restarts on its own. If keys or lighting act strangely after a big change,
+   reset the EEPROM: hold Esc while plugging in, or remap through VIA / [Keychron Launcher](https://launcher.keychron.com/).
+
+On Linux, flashing without root needs QMK's udev rules:
+`sudo cp ../qmk_firmware/util/udev/50-qmk.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`.
+
+## Keymap summary
+
+| Layer | What it does |
+|---|---|
+| `WIN_BASE` | Stock Windows layout. Top-right keys: PrtSc, F14, RGB toggle, Macro 1, Macro 2, Key Lock, (empty) |
+| `WIN_FN` | Stock Keychron Fn layer + record Macro 1/2 (Fn + the Macro 1/Macro 2 keys), bootloader (Fn+V) |
+
+RGB indicators: Caps → letters red, Shift → letters yellow, Ctrl → special keys turquoise,
+Num Lock off → numpad red, Fn held → Fn-layer keys green.
+
+Keep the side switch on **Win**: the Mac position selects a layer this keymap doesn't define.
