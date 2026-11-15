@@ -1,10 +1,5 @@
 #pragma once
 
-// ref: https://docs.qmk.fm/features/rgb_matrix#additional-configh-options
-#define ENABLE_RGB_MATRIX_SOLID_MULTISPLASH
-#define RGB_MATRIX_SOLID_REACTIVE_GRADIENT_MODE
-
-#define RGB_MATRIX_DEFAULT_MODE RGB_MATRIX_SOLID_MULTISPLASH
-#define RGB_MATRIX_DEFAULT_SPD 64
-#define RGB_MATRIX_DEFAULT_HUE 175
-#define RGB_MATRIX_DEFAULT_SAT 200
+// Heatmap Blur is the only RGB effect (see rgb_matrix_user.inc, HEATMAP_SPEC.md).
+// No ENABLE_RGB_MATRIX_* defines: all built-in effects are disabled.
+#define RGB_MATRIX_DEFAULT_MODE RGB_MATRIX_CUSTOM_heatmap_blur
