@@ -39,6 +39,10 @@ qmk compile -kb keychron/k5_max/iso/rgb -km arrg
 
 `qmk userspace-compile` builds every target listed in `qmk.json`.
 
+Newer system compilers (e.g. Arch's `arm-none-eabi-gcc` 16) stop the build on an unused
+variable in Keychron's `lkbt51.c`. `rules.mk` passes `-Wno-error=unused-but-set-variable`,
+so it only warns.
+
 ### Updating to a newer Keychron firmware
 
 ```sh
